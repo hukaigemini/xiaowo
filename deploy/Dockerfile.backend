@@ -1,0 +1,32 @@
+# 后端 Dockerfile
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /app
+COPY go.mod ./
+# go.sum might not exist yet, so we copy it only if it exists, or just copy go.mod first.
+# Actually, COPY go.mod go.sum ./ will fail if go.sum doesn't exist.
+# For now, I'll assume go.sum will be generated. But since I can't run go mod tidy, I might not have it.
+# I'll just COPY . . for now to be safe, or create a dummy go.sum?
+# No, I'll just COPY go.mod ./ and skip go.sum for now if it fails.
+# But standard practice is COPY go.mod go.sum .
+# Since I am generating the file, I will stick to the standard.
+# If the user runs this, they will need to run `go mod tidy` first.
+
+COPY go.mod ./
+# COPY go.sum ./ # Commented out to avoid build failure if not present yet
+
+# RUN go mod download # Commented out because I can't run it here
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
+
+# 使用 distroless 镜像，更小更安全 (无 Shell)
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+
+COPY --from=builder /app/main .
+COPY --from=builder /app/config/ ./config/
+
+EXPOSE 8080
+USER nonroot:nonroot
+ENTRYPOINT ["/main"]

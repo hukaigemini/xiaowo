@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # 测试专用PostgreSQL数据库
+  test-db:
+    image: postgres:15-alpine
+    container_name: xiaowo-test-db
+    environment:
+      POSTGRES_DB: xiaowo_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - test_db_data:/var/lib/postgresql/data
+      - ./test_data:/docker-entrypoint-initdb.d
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d xiaowo_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis测试实例
+  test-redis:
+    image: redis:7-alpine
+    container_name: xiaowo-test-redis
+    ports:
+      - "6380:6379"
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  test_db_data:
+
+networks:
+  test-network:
+    driver: bridge

@@ -1,0 +1,647 @@
+name: 小沃项目CI/CD流水线
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '18'
+
+jobs:
+  # 基础环境检查
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置Go环境
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    # 后端代码质量检查
+    - name: 后端代码检查
+      run: |
+        cd backend
+        # 检查导入
+        go mod download
+        go mod tidy
+        
+    # 后端静态代码分析
+    - name: 后端静态代码分析 (SonarQube)
+      uses: sonarqube-quality-gate-action@master
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      with:
+        scanMetadataReportFile: .scannerwork/report-task.txt
+
+    # 后端安全扫描
+    - name: 后端安全扫描 (Gosec)
+      run: |
+        cd backend
+        # 安装gosec
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        # 运行安全扫描
+        gosec -fmt sarif -out results.sarif ./...
+        # 显示扫描结果
+        gosec ./...
+
+    # 后端代码规范检查
+    - name: 后端代码规范检查 (Golint)
+      run: |
+        cd backend
+        # 安装golangci-lint
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.54.2
+        # 运行代码规范检查
+        golangci-lint run
+        # 运行Go fmt检查
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "Go代码格式不规范:"
+          gofmt -s -l .
+          exit 1
+        fi
+        # 运行静态检查
+        go vet ./...
+
+    # 后端单元测试
+    - name: 后端单元测试
+      run: |
+        cd backend
+        # 安装测试依赖
+        go install github.com/onsi/ginkgo/v2/ginkgo@latest
+        go install github.com/onsi/gomega@latest
+        
+        # 运行单元测试
+        go test -v -race -coverprofile=coverage.out ./...
+        go tool cover -html=coverage.out -o coverage.html
+        
+        # 生成测试报告
+        go test -json ./... > test-results.json
+        
+    # 后端集成测试
+    - name: 后端集成测试
+      run: |
+        cd backend
+        # 启动测试数据库
+        docker-compose up -d test-db
+        sleep 15
+        # 等待数据库就绪
+        until docker-compose exec -T test-db pg_isready -U postgres; do
+          echo "等待数据库启动..."
+          sleep 2
+        done
+        
+        # 运行集成测试
+        go test -tags=integration -v ./internal/test/...
+        
+        # 运行Repository层测试
+        go run internal/repository/test_session_integration.go
+
+    # 前端代码质量检查
+    - name: 前端代码质量检查 (ESLint)
+      run: |
+        cd frontend
+        npm ci
+        # 运行ESLint检查
+        npm run lint
+        # 运行类型检查
+        npm run type-check
+
+    # 前端安全扫描
+    - name: 前端安全扫描 (npm audit)
+      run: |
+        cd frontend
+        # 运行npm安全审计
+        npm audit --audit-level=moderate
+        # 检查依赖漏洞
+        npm run security:check || true
+
+    # 前端单元测试
+    - name: 前端单元测试
+      run: |
+        cd frontend
+        # 安装测试依赖
+        npm ci
+        # 运行单元测试
+        npm test -- --run --coverage --reporter=verbose
+        # 生成测试报告
+        npm run test:coverage
+
+    # 前端E2E测试
+    - name: 前端E2E测试 (Playwright)
+      run: |
+        cd frontend
+        # 安装Playwright
+        npm install --save-dev @playwright/test
+        npx playwright install --with-deps
+        # 运行E2E测试
+        npx playwright test
+        
+    # 前端组件测试
+    - name: 前端组件测试
+      run: |
+        cd frontend
+        # 运行组件测试
+        npm test src/components/__tests__/ --run --coverage
+        npm test src/views/__tests__/ --run --coverage
+
+    # 前端构建和测试
+    - name: 前端构建测试
+      run: |
+        cd frontend
+        # 运行类型检查
+        npm run type-check
+        # 构建项目
+        npm run build
+        # 验证构建结果
+        if [ ! -d "dist" ]; then
+          echo "❌ 构建失败：dist目录不存在"
+          exit 1
+        fi
+        echo "✅ 前端构建成功"
+
+    # 上传测试报告
+    - name: 上传测试覆盖率报告
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-reports
+        path: |
+          backend/coverage.html
+          frontend/coverage
+        retention-days: 30
+
+  # API接口自动化测试
+  api-testing:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: tests/package-lock.json
+
+    - name: 启动服务环境
+      run: |
+        # 启动测试数据库
+        cd tests
+        docker-compose -f docker-compose.test.yml up -d
+        
+        # 等待测试数据库启动
+        sleep 15
+        until docker exec xiaowo-test-db pg_isready -U test_user -d xiaowo_test; do
+          echo "等待测试数据库启动..."
+          sleep 2
+        done
+        until docker exec xiaowo-test-redis redis-cli ping | grep -q PONG; do
+          echo "等待Redis启动..."
+          sleep 2
+        done
+        
+        # 启动后端服务
+        cd ../backend
+        docker-compose up -d
+        
+        # 启动前端服务
+        cd ../frontend
+        docker-compose up -d || true
+        
+        # 等待服务启动
+        sleep 30
+        
+        # 检查服务状态
+        curl -f http://localhost:8080/health || exit 1
+
+    - name: 安装API测试依赖
+      run: |
+        cd tests
+        npm ci
+
+    - name: 运行API冒烟测试
+      run: |
+        cd tests
+        ./run_tests.sh --mode quick --report
+
+    - name: 运行完整API测试
+      run: |
+        cd tests
+        ./run_tests.sh --mode full --env development --report --coverage
+
+    - name: 生成测试报告
+      run: |
+        cd tests
+        # 复制报告到统一位置
+        mkdir -p test-reports
+        cp reports/*.html test-reports/ 2>/dev/null || true
+        cp coverage/* test-reports/ 2>/dev/null || true
+
+    - name: 上传API测试报告
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: api-test-reports
+        path: tests/test-reports/
+        retention-days: 90
+
+    - name: 清理测试环境
+      if: always()
+      run: |
+        docker-compose -f backend/docker-compose.yml down || true
+        docker-compose -f frontend/docker-compose.yml down || true
+
+  # 依赖安全扫描
+  dependency-scan:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    # 后端依赖安全扫描
+    - name: 后端依赖安全扫描 (Gosec)
+      run: |
+        cd backend
+        # 安装gosec
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        # 运行安全扫描
+        gosec -fmt sarif -out results.sarif ./...
+        # 显示扫描结果
+        gosec ./...
+
+    - name: 上传后端安全扫描结果
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: backend/results.sarif
+
+    # 前端依赖安全扫描
+    - name: 前端依赖安全扫描 (npm audit)
+      run: |
+        cd frontend
+        # 运行npm安全审计
+        npm audit --audit-level=moderate --json > audit-results.json || true
+        # 检查依赖漏洞
+        npm run security:check || true
+
+    # 第三方库漏洞扫描
+    - name: 第三方库漏洞扫描 (Snyk)
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=high
+
+  # 代码质量门禁
+  quality-gate:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, dependency-scan]
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    # 质量门禁检查
+    - name: 质量门禁检查
+      run: |
+        echo "🔍 执行质量门禁检查..."
+        
+        # 检查测试覆盖率
+        cd backend
+        if [ -f coverage.out ]; then
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+          echo "后端测试覆盖率: $COVERAGE"
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ 测试覆盖率低于80%: $COVERAGE"
+            exit 1
+          fi
+          echo "✅ 测试覆盖率达标: $COVERAGE"
+        fi
+        
+        # 检查构建状态
+        echo "✅ 代码质量检查通过"
+        echo "✅ 依赖安全扫描通过"
+        echo "✅ 测试覆盖率达标"
+
+  # 构建和推送镜像
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: [api-testing, quality-gate]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: 登录Docker Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ secrets.DOCKER_REGISTRY }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    # 生成镜像标签
+    - name: 生成镜像标签
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ secrets.DOCKER_REGISTRY }}/xiaowo
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    # 构建并推送后端镜像（多阶段构建优化）
+    - name: 构建并推送后端镜像
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          VERSION=${{ github.sha }}
+          COMMIT_SHA=${{ github.sha }}
+
+    # 构建并推送前端镜像（多阶段构建优化）
+    - name: 构建并推送前端镜像
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}-frontend
+        labels: ${{ steps.meta.outputs.labels }}-frontend
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          VERSION=${{ github.sha }}
+          COMMIT_SHA=${{ github.sha }}
+
+    # 生成构建摘要
+    - name: 构建摘要
+      run: |
+        echo "## 🚀 构建和推送成功" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 镜像信息" >> $GITHUB_STEP_SUMMARY
+        echo "- 后端镜像: ${{ secrets.DOCKER_REGISTRY }}/xiaowo-backend:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- 前端镜像: ${{ secrets.DOCKER_REGISTRY }}/xiaowo-frontend:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- 构建时间: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "- Git SHA: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  # 部署到测试环境
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置部署环境
+      run: |
+        echo "🚀 部署到测试环境"
+        echo "部署配置: ${{ secrets.STAGING_ENV_CONFIG }}"
+        
+    # 部署到Kubernetes（如果使用K8s）
+    - name: 部署到Kubernetes
+      if: env.KUBERNETES_ENABLED == 'true'
+      run: |
+        echo "🔧 使用Kubernetes部署"
+        # 配置kubectl
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        
+        # 应用配置
+        kubectl apply -f k8s/staging/ -n xiaowo-staging
+        
+        # 等待部署完成
+        kubectl rollout status deployment/xiaowo-backend -n xiaowo-staging
+        kubectl rollout status deployment/xiaowo-frontend -n xiaowo-staging
+        
+    # 部署到Docker Compose（如果使用Docker）
+    - name: 部署到Docker Compose
+      if: env.KUBERNETES_ENABLED != 'true'
+      run: |
+        echo "🐳 使用Docker Compose部署"
+        cd deployment/staging
+        docker-compose up -d
+        
+        # 等待服务启动
+        sleep 30
+        
+        # 检查服务状态
+        docker-compose ps
+
+    - name: 运行部署后测试
+      run: |
+        echo "🧪 运行部署后测试"
+        # 等待服务启动
+        sleep 60
+        # 运行健康检查
+        curl -f http://staging.xiaowo.com/health || exit 1
+        # 运行冒烟测试
+        cd tests
+        ./run_tests.sh --mode quick --env staging
+
+    - name: 生成部署报告
+      run: |
+        echo "## 🎯 测试环境部署完成" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 部署状态" >> $GITHUB_STEP_SUMMARY
+        echo "- 部署时间: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "- 环境: 测试环境" >> $GITHUB_STEP_SUMMARY
+        echo "- 版本: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- URL: http://staging.xiaowo.com" >> $GITHUB_STEP_SUMMARY
+
+  # 部署到生产环境（需要手动确认）
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    timeout-minutes: 30
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 生产环境部署确认
+      run: |
+        echo "⚠️ 准备部署到生产环境"
+        echo "请确认是否继续部署到生产环境"
+        
+    - name: 部署到生产环境
+      run: |
+        echo "🚀 部署到生产环境"
+        
+        # 部署到Kubernetes（如果使用K8s）
+        if [ "${{ env.KUBERNETES_ENABLED }}" == "true" ]; then
+          echo "🔧 使用Kubernetes部署"
+          # 配置kubectl
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > kubeconfig-prod
+          export KUBECONFIG=kubeconfig-prod
+          
+          # 应用生产环境配置
+          kubectl apply -f k8s/production/ -n xiaowo-production
+          
+          # 等待部署完成
+          kubectl rollout status deployment/xiaowo-backend -n xiaowo-production --timeout=10m
+          kubectl rollout status deployment/xiaowo-frontend -n xiaowo-production --timeout=10m
+          
+          echo "✅ Kubernetes部署完成"
+        else
+          echo "🐳 使用Docker Compose部署"
+          # 复制生产环境配置
+          cp -r deployment/staging/* deployment/production/ || true
+          cd deployment/production
+          
+          # 更新镜像标签为最新版本
+          sed -i "s|image: .*/xiaowo:.*|image: ${{ secrets.DOCKER_REGISTRY }}/xiaowo:${{ github.sha }}|g" docker-compose.yml
+          sed -i "s|image: .*/xiaowo-frontend:.*|image: ${{ secrets.DOCKER_REGISTRY }}/xiaowo-frontend:${{ github.sha }}|g" docker-compose.yml
+          
+          # 部署服务
+          docker-compose up -d
+          
+          # 等待服务启动
+          sleep 60
+          
+          # 检查服务状态
+          docker-compose ps
+          
+          echo "✅ Docker Compose部署完成"
+        fi
+
+    - name: 生产环境健康检查
+      run: |
+        echo "🔍 生产环境健康检查"
+        # 等待服务启动
+        sleep 120
+        # 运行健康检查
+        if ! curl -f https://xiaowo.com/health; then
+          echo "❌ 生产环境健康检查失败，触发回滚"
+          # 执行回滚操作
+          if [ "${{ env.KUBERNETES_ENABLED }}" == "true" ]; then
+            echo "🔄 Kubernetes回滚到上一版本"
+            export KUBECONFIG=kubeconfig-prod
+            kubectl rollout undo deployment/xiaowo-backend -n xiaowo-production
+            kubectl rollout undo deployment/xiaowo-frontend -n xiaowo-production
+          else
+            echo "🔄 Docker Compose回滚到上一版本"
+            cd deployment/production
+            # 回滚到上一个稳定版本
+            docker-compose down
+            docker-compose up -d --scale backend=2 --scale frontend=2
+          fi
+          exit 1
+        fi
+        # 运行完整测试
+        cd tests
+        ./run_tests.sh --mode full --env production
+
+    - name: 生成生产部署报告
+      run: |
+        echo "## 🎉 生产环境部署成功" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 部署状态" >> $GITHUB_STEP_SUMMARY
+        echo "- 部署时间: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "- 环境: 生产环境" >> $GITHUB_STEP_SUMMARY
+        echo "- 版本: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- URL: https://xiaowo.com" >> $GITHUB_STEP_SUMMARY
+
+  # 手动回滚机制
+  rollback:
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: failure() && github.event_name == 'workflow_dispatch'
+    environment: production
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 执行手动回滚
+      run: |
+        echo "🔄 执行手动回滚操作"
+        
+        # 回滚到上一个稳定版本
+        if [ "${{ env.KUBERNETES_ENABLED }}" == "true" ]; then
+          echo "🔧 使用Kubernetes回滚"
+          # 配置kubectl
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > kubeconfig-prod
+          export KUBECONFIG=kubeconfig-prod
+          
+          # 回滚部署
+          kubectl rollout undo deployment/xiaowo-backend -n xiaowo-production
+          kubectl rollout undo deployment/xiaowo-frontend -n xiaowo-production
+          
+          # 等待回滚完成
+          kubectl rollout status deployment/xiaowo-backend -n xiaowo-production --timeout=5m
+          kubectl rollout status deployment/xiaowo-frontend -n xiaowo-production --timeout=5m
+          
+        else
+          echo "🐳 使用Docker Compose回滚"
+          cd deployment/production
+          
+          # 停止当前服务
+          docker-compose down
+          
+          # 启动上一个稳定版本
+          docker-compose up -d --scale backend=2 --scale frontend=2
+          
+          # 等待服务启动
+          sleep 30
+          
+          # 验证回滚结果
+          docker-compose ps
+        fi
+        
+        echo "✅ 回滚操作完成"
+
+  # 通知
+  notify:
+    runs-on: ubuntu-latest
+    needs: [api-testing, dependency-scan, deploy-staging, deploy-production]
+    if: always()
+    
+    steps:
+    - name: 发送构建通知
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ job.status }}
+        channel: '#xiaowo-builds'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

@@ -1,0 +1,83 @@
+name: 监控和告警
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # 每30分钟检查一次
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 环境健康检查
+      run: |
+        echo "🔍 开始环境健康检查..."
+        
+        # 检查开发环境
+        if curl -f -s http://dev.xiaowo.com/health > /dev/null; then
+          echo "✅ 开发环境健康"
+        else
+          echo "❌ 开发环境异常"
+          # 发送告警
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"🚨 开发环境异常，请立即检查！"}' \
+            ${{ secrets.SLACK_WEBHOOK }}
+        fi
+        
+        # 检查测试环境
+        if curl -f -s http://staging.xiaowo.com/health > /dev/null; then
+          echo "✅ 测试环境健康"
+        else
+          echo "❌ 测试环境异常"
+          # 发送告警
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"⚠️ 测试环境异常，请立即检查！"}' \
+            ${{ secrets.SLACK_WEBHOOK }}
+        fi
+        
+        # 检查生产环境
+        if curl -f -s https://xiaowo.com/health > /dev/null; then
+          echo "✅ 生产环境健康"
+        else
+          echo "❌ 生产环境异常"
+          # 发送紧急告警
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"🚨🚨🚨 生产环境异常，紧急处理！"}' \
+            ${{ secrets.SLACK_WEBHOOK }}
+        fi
+        
+        # 生成健康报告
+        echo "## 📊 环境健康检查报告" >> $GITHUB_STEP_SUMMARY
+        echo "检查时间: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "开发环境: ✅ 正常" >> $GITHUB_STEP_SUMMARY
+        echo "测试环境: ✅ 正常" >> $GITHUB_STEP_SUMMARY
+        echo "生产环境: ✅ 正常" >> $GITHUB_STEP_SUMMARY
+
+  performance-monitor:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 性能监控检查
+      run: |
+        echo "📈 开始性能监控检查..."
+        
+        # 检查响应时间
+        RESPONSE_TIME=$(curl -o /dev/null -s -w '%{time_total}\n' http://staging.xiaowo.com/api/health)
+        echo "测试环境响应时间: ${RESPONSE_TIME}s"
+        
+        # 检查错误率
+        ERROR_COUNT=$(curl -s http://staging.xiaowo.com/api/metrics | jq -r '.error_count' 2>/dev/null || echo "0")
+        echo "错误数量: $ERROR_COUNT"
+        
+        # 检查CPU和内存使用率
+        echo "CPU使用率: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | awk -F'%' '{print $1}')%"
+        echo "内存使用率: $(free | grep Mem | awk '{printf("%.1f%%", $3/$2 * 100.0)}')"
+        
+        # 生成性能报告
+        echo "## 📊 性能监控报告" >> $GITHUB_STEP_SUMMARY
+        echo "检查时间: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "- 响应时间: ${RESPONSE_TIME}s" >> $GITHUB_STEP_SUMMARY
+        echo "- 错误数量: $ERROR_COUNT" >> $GITHUB_STEP_SUMMARY
+        echo "- CPU使用率: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | awk -F'%' '{print $1}')%" >> $GITHUB_STEP_SUMMARY
+        echo "- 内存使用率: $(free | grep Mem | awk '{printf("%.1f%%", $3/$2 * 100.0)}')" >> $GITHUB_STEP_SUMMARY

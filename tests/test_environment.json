@@ -1,0 +1,122 @@
+{
+  "base_url": "http://localhost:8080",
+  "api_version": "v1",
+  "environments": {
+    "development": {
+      "base_url": "http://localhost:8080",
+      "timeout": 5000,
+      "retries": 3
+    },
+    "staging": {
+      "base_url": "https://staging-api.xiaowo.com",
+      "timeout": 10000,
+      "retries": 3
+    },
+    "production": {
+      "base_url": "https://api.xiaowo.com",
+      "timeout": 15000,
+      "retries": 2
+    }
+  },
+  "test_data": {
+    "users": [
+      {
+        "nickname": "测试用户001",
+        "avatar": "https://example.com/avatar1.jpg",
+        "expected_session_prefix": "sess_test_001"
+      },
+      {
+        "nickname": "测试用户002",
+        "avatar": "https://example.com/avatar2.jpg", 
+        "expected_session_prefix": "sess_test_002"
+      },
+      {
+        "nickname": "测试用户003",
+        "avatar": "https://example.com/avatar3.jpg",
+        "expected_session_prefix": "sess_test_003"
+      }
+    ],
+    "rooms": [
+      {
+        "name": "测试公开房间",
+        "description": "用于API测试的公开房间",
+        "is_private": false,
+        "max_users": 10,
+        "media_url": "https://test.com/video1.mp4",
+        "media_title": "测试视频1",
+        "media_type": "video",
+        "media_duration": 3600,
+        "settings": {
+          "auto_play": true,
+          "allow_seek": true,
+          "default_volume": 1.0,
+          "quality": "auto",
+          "subtitle_on": false,
+          "subtitle_lang": "zh"
+        }
+      },
+      {
+        "name": "测试私密房间",
+        "description": "用于API测试的私密房间",
+        "is_private": true,
+        "password": "test123",
+        "max_users": 5,
+        "media_url": "https://test.com/video2.mp4",
+        "media_title": "测试视频2",
+        "media_type": "video",
+        "media_duration": 7200,
+        "settings": {
+          "auto_play": false,
+          "allow_seek": false,
+          "default_volume": 0.8,
+          "quality": "1080p",
+          "subtitle_on": true,
+          "subtitle_lang": "en"
+        }
+      }
+    ],
+    "test_cases": {
+      "boundary_values": {
+        "room_name_min_length": 1,
+        "room_name_max_length": 100,
+        "max_users_min": 1,
+        "max_users_max": 1000,
+        "invalid_media_url": "invalid_url",
+        "future_time": "2099-12-31T23:59:59Z"
+      },
+      "error_scenarios": {
+        "missing_required_fields": {
+          "create_room_missing_name": ["media_url"],
+          "create_room_missing_media_url": ["name"],
+          "join_room_missing_room_id": ["password"]
+        },
+        "invalid_data_types": {
+          "create_room_invalid_max_users": "invalid_number",
+          "create_room_invalid_is_private": "not_boolean"
+        },
+        "authorization_errors": {
+          "missing_session_token": "",
+          "invalid_session_token": "invalid_token_123",
+          "expired_session_token": "expired_session_123"
+        }
+      }
+    }
+  },
+  "websocket": {
+    "connection_timeout": 10000,
+    "message_timeout": 5000,
+    "heartbeat_interval": 30000,
+    "max_message_size": 1024
+  },
+  "performance": {
+    "response_time_threshold": 500,
+    "concurrent_users": 50,
+    "websocket_connections": 100,
+    "test_duration": 300
+  },
+  "database": {
+    "test_db_path": "/tmp/xiaowo_test.db",
+    "cleanup_after_tests": true,
+    "seed_test_data": true
+  }
+}

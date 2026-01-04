@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    image: ${DOCKER_REGISTRY}/xiaowo:${VERSION:-latest}
+    container_name: xiaowo-backend-staging
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://staging_user:staging_pass@postgres-staging:5432/xiaowo_staging
+      - REDIS_URL=redis://redis-staging:6379
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - postgres-staging
+      - redis-staging
+    networks:
+      - xiaowo-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 前端服务
+  frontend:
+    image: ${DOCKER_REGISTRY}/xiaowo-frontend:${VERSION:-latest}
+    container_name: xiaowo-frontend-staging
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=staging
+      - API_URL=http://backend:8080
+    depends_on:
+      - backend
+    networks:
+      - xiaowo-network
+
+  # PostgreSQL数据库
+  postgres-staging:
+    image: postgres:15
+    container_name: xiaowo-postgres-staging
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=xiaowo_staging
+      - POSTGRES_USER=staging_user
+      - POSTGRES_PASSWORD=staging_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - xiaowo-network
+
+  # Redis缓存
+  redis-staging:
+    image: redis:7-alpine
+    container_name: xiaowo-redis-staging
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_staging_data:/data
+    networks:
+      - xiaowo-network
+
+volumes:
+  postgres_staging_data:
+  redis_staging_data:
+
+networks:
+  xiaowo-network:
+    driver: bridge

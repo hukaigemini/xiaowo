@@ -1,0 +1,11 @@
+server:
+  port: 8080
+  mode: debug
+
+database:
+  driver: sqlite
+  source: /data/xiaowo.db
+
+jwt:
+  secret: dev_secret
+  expire: 86400

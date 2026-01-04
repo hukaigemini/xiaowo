@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小窝 - 温馨小屋</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#FFFBF0', // Warm Cream
+                        primary: '#FF9F76', // Soft Coral
+                        'primary-hover': '#FF8C5A',
+                        secondary: '#A3C9A8', // Sage Green
+                        surface: '#F7EEDD', // Sand
+                        text: {
+                            main: '#4A3B32', // Deep Coffee
+                            muted: '#8D7B68', // Mocha
+                            light: '#FFFBF0' // Cream for dark backgrounds
+                        },
+                        dark: {
+                            bg: '#2C241F', // Dark Coffee for Theater Mode
+                            surface: '#3E3228' // Darker wood tone
+                        }
+                    },
+                    borderRadius: {
+                        'xl': '12px',
+                        '2xl': '16px',
+                        '3xl': '24px',
+                        '4xl': '32px'
+                    },
+                    boxShadow: {
+                        'warm': '0 10px 40px -10px rgba(255, 159, 118, 0.3)',
+                        'card': '0 20px 60px -15px rgba(74, 59, 50, 0.1)',
+                        'inner-warm': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center bg-bg text-text-main font-sans overflow-hidden selection:bg-primary selection:text-white">
+    
+    <!-- 装饰背景：柔和的漫反射光晕 -->
+    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div class="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-[#FF9F76]/10 rounded-full blur-[100px]"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#A3C9A8]/10 rounded-full blur-[80px]"></div>
+    </div>
+
+    <!-- 首页：欢迎卡片 -->
+    <div id="home-page" class="relative z-10 w-full max-w-md px-6 fade-in">
+        
+        <!-- 主卡片 -->
+        <div class="bg-surface rounded-4xl p-8 shadow-card border-2 border-white/50 relative overflow-hidden mt-8">
+            
+            <!-- 顶部装饰线 -->
+            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary/20 via-primary/40 to-primary/20"></div>
+
+            <!-- 标题区 -->
+            <div class="text-center mb-10 mt-2">
+                <div class="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-sm mb-6 text-4xl transform hover:scale-105 transition-transform duration-300 cursor-default">
+                    🏠
+                </div>
+                <h1 class="text-3xl font-bold tracking-tight text-text-main mb-2">小窝 · 温馨小屋</h1>
+                <p class="text-text-muted font-medium px-4">“不管多远，窝在一起看电影。”</p>
+            </div>
+
+            <!-- 快速回房提示 -->
+            <div id="quick-return" class="hidden bg-primary/10 border-2 border-primary/30 rounded-2xl p-4 mb-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-2.5 h-2.5 bg-primary rounded-full animate-pulse"></div>
+                        <span class="text-text-main font-medium">检测到您有未过期的房间</span>
+                        <span id="saved-room-id" class="text-primary bg-primary/20 px-3 py-1 rounded-xl text-sm font-mono">8XA92B</span>
+                    </div>
+                    <button id="return-room-btn" class="text-primary hover:text-primary-hover font-bold text-sm transition-colors">
+                        回到房间 →
+                    </button>
+                </div>
+            </div>
+
+            <!-- 核心操作区 -->
+            <div class="space-y-6">
+                
+                <!-- 创建房间 -->
+                <button id="create-room-btn" class="w-full py-4 bg-primary hover:bg-primary-hover text-white font-bold text-lg rounded-2xl shadow-[0_8px_20px_-6px_rgba(255,159,118,0.5)] hover:shadow-[0_12px_25px_-8px_rgba(255,159,118,0.6)] hover:-translate-y-1 transition-all duration-300 active:scale-95 flex items-center justify-center space-x-2 group">
+                    <span>✨ 搭个温馨小窝</span>
+                    <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                </button>
+
+                <!-- 分隔符 -->
+                <div class="relative flex py-2 items-center">
+                    <div class="flex-grow border-t-2 border-[#E6D5B8]"></div>
+                    <span class="flex-shrink-0 mx-4 text-text-muted text-sm font-medium">或</span>
+                    <div class="flex-grow border-t-2 border-[#E6D5B8]"></div>
+                </div>
+
+                <!-- 加入房间 -->
+                <div class="space-y-3">
+                    <div class="relative group">
+                        <input type="text" placeholder="输入暗号 (房间号)..." 
+                            class="w-full px-6 py-4 bg-bg rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none text-lg text-text-main placeholder-[#C5B4A0] transition-all shadow-inner-warm text-center font-medium tracking-widest">
+                    </div>
+                    <button id="join-room-btn" class="w-full py-3 bg-white border-2 border-[#E6D5B8] text-text-muted font-bold rounded-2xl hover:bg-[#FFFBF0] hover:text-text-main hover:border-primary/30 transition-all duration-300 active:scale-95 shadow-sm">
+                        敲门进入
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部信息 -->
+        <div class="mt-8 text-center">
+            <p class="text-text-muted/60 text-xs font-medium tracking-wider mb-4">🔒 只有你们知道这里。就像在家里关上门一样安全。</p>
+        </div>
+    </div>
+
+    <script>
+        const createBtn = document.getElementById('create-room-btn');
+        const joinBtn = document.getElementById('join-room-btn');
+        const returnBtn = document.getElementById('return-room-btn');
+        const quickReturn = document.getElementById('quick-return');
+        const savedRoomId = document.getElementById('saved-room-id');
+
+        // 检测LocalStorage中的房间信息
+        function checkSavedRoom() {
+            try {
+                const roomData = localStorage.getItem('xiaowo_room');
+                if (roomData) {
+                    const { roomId, lastVisit } = JSON.parse(roomData);
+                    const now = Date.now();
+                    // 检查是否在15分钟内
+                    if (now - lastVisit < 15 * 60 * 1000) {
+                        savedRoomId.textContent = roomId;
+                        quickReturn.classList.remove('hidden');
+                        return roomId;
+                    }
+                }
+            } catch (error) {
+                console.error('检查房间信息失败:', error);
+            }
+            return null;
+        }
+
+        function enterRoom(roomId = null) {
+            // 保存房间信息到LocalStorage
+            if (roomId) {
+                localStorage.setItem('xiaowo_room', JSON.stringify({
+                    roomId: roomId,
+                    lastVisit: Date.now()
+                }));
+            }
+            
+            // 添加简单的转场动画
+            document.getElementById('home-page').classList.add('opacity-0', 'translate-y-4');
+            setTimeout(() => {
+                window.location.href = 'room.html';
+            }, 300);
+        }
+
+        // 返回房间
+        function returnToRoom() {
+            const roomId = savedRoomId.textContent;
+            enterRoom(roomId);
+        }
+
+        // 初始化检测
+        checkSavedRoom();
+
+        createBtn.addEventListener('click', enterRoom);
+        joinBtn.addEventListener('click', enterRoom);
+        returnBtn.addEventListener('click', returnToRoom);
+    </script>
+</body>
+</html>

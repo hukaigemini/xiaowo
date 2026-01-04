@@ -1,0 +1,224 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义基础样式 */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply text-gray-900 antialiased;
+  }
+  
+  /* 滚动条样式 */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+}
+
+/* 通用组件样式 */
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-outline {
+    @apply border border-primary-600 text-primary-600 hover:bg-primary-600 hover:text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+  }
+  
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  }
+  
+  .textarea {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none;
+  }
+}
+
+/* 动画样式 */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  .animate-bounce-subtle {
+    animation: bounceSubtle 2s infinite;
+  }
+}
+
+/* 响应式辅助类 */
+@layer utilities {
+  .container-mobile {
+    @apply max-w-sm mx-auto px-4;
+  }
+  
+  .container-tablet {
+    @apply max-w-2xl mx-auto px-6;
+  }
+  
+  .container-desktop {
+    @apply max-w-4xl mx-auto px-8;
+  }
+}
+
+/* 自定义媒体查询优化 */
+@layer utilities {
+  /* 移动设备优化 */
+  @media (max-width: 640px) {
+    .touch-optimize {
+      min-height: 44px;
+      min-width: 44px;
+    }
+    
+    .mobile-padding {
+      padding: 1rem;
+    }
+    
+    .mobile-text {
+      font-size: 0.875rem;
+      line-height: 1.25rem;
+    }
+    
+    .mobile-spacing {
+      gap: 0.75rem;
+    }
+  }
+  
+  /* 横屏模式优化 */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .landscape-compact {
+      padding-top: 0.5rem;
+      padding-bottom: 0.5rem;
+    }
+    
+    .landscape-hidden {
+      display: none;
+    }
+  }
+  
+  /* 高分辨率屏幕优化 */
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .hd-optimize {
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+    }
+  }
+  
+  /* 小屏幕设备优化 */
+  @media (max-width: 480px) {
+    .xs-text {
+      font-size: 0.75rem;
+    }
+    
+    .xs-spacing {
+      gap: 0.5rem;
+    }
+    
+    .xs-padding {
+      padding: 0.75rem;
+    }
+  }
+  
+  /* 平板设备优化 */
+  @media (min-width: 641px) and (max-width: 1024px) {
+    .tablet-layout {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+  }
+  
+  /* 桌面大屏幕优化 */
+  @media (min-width: 1025px) {
+    .desktop-expanded {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+  }
+}
+
+/* 动画关键帧 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounceSubtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(255, 159, 118, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 159, 118, 0.6);
+  }
+}
+
+/* 响应式动画 */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  .animate-bounce-subtle {
+    animation: bounceSubtle 2s infinite;
+  }
+  
+  .animate-pulse-glow {
+    animation: pulseGlow 2s infinite;
+  }
+}

@@ -1,0 +1,1480 @@
+openapi: 3.0.3
+info:
+  title: 小窝同步观影API
+  description: |
+    小窝项目实时同步观影平台的RESTful API接口规范。
+    
+    ## 核心功能
+    - 房间创建与管理
+    - 用户会话管理  
+    - 实时播放同步
+    - 成员权限控制
+    
+    ## 认证方式
+    - Header: `X-Session-ID: {session_id}`
+    - 所有需要认证的接口都需要在Header中传递有效的Session ID
+    
+    ## 错误处理
+    - 统一错误码体系
+    - 详细错误信息
+    - 请求追踪ID
+  version: 1.0.0
+  contact:
+    name: 小窝技术团队
+    email: tech@xiaowo.com
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.xiaowo.com/v1
+    description: 生产环境
+  - url: http://localhost:8080/v1  
+    description: 开发环境
+
+security:
+  - SessionAuth: []
+
+paths:
+  # ========== 房间管理 ==========
+  /rooms:
+    post:
+      tags:
+        - 房间管理
+      summary: 创建房间
+      description: 创建一个新的同步观影房间
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+            examples:
+              创建公开房间:
+                value:
+                  name: "我的观影房间"
+                  description: "和朋友一起看剧"
+                  media_url: "https://example.com/video.mp4"
+                  is_private: false
+                  max_users: 7
+              创建私密房间:
+                value:
+                  name: "私人影院"
+                  media_url: "https://example.com/private.mp4"
+                  is_private: true
+                  password: "password123"
+      responses:
+        '201':
+          description: 房间创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRoomResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    get:
+      tags:
+        - 房间管理
+      summary: 获取房间列表
+      description: 分页获取房间列表，支持状态筛选
+      parameters:
+        - name: status
+          in: query
+          description: 房间状态筛选
+          schema:
+            type: string
+            enum: [active, inactive, archived]
+        - name: page
+          in: query
+          description: 页码
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: 每页数量
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          description: 搜索关键词（房间名称或描述）
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        '200':
+          description: 房间列表获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomListResponse'
+
+  /rooms/{room_id}:
+    get:
+      tags:
+        - 房间管理
+      summary: 获取房间详情
+      description: 根据房间ID获取房间详细信息
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID（6位房间号）
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      responses:
+        '200':
+          description: 房间详情获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - 房间管理
+      summary: 更新房间信息
+      description: 更新房间名称、描述等基本信息（仅房主可操作）
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomRequest'
+      responses:
+        '200':
+          description: 房间更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomDetailResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags:
+        - 房间管理
+      summary: 删除/归档房间
+      description: 删除或归档房间（仅房主可操作）
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      responses:
+        '200':
+          description: 房间删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========== 用户会话管理 ==========
+  /sessions:
+    post:
+      tags:
+        - 用户会话
+      summary: 创建用户会话
+      description: 创建新的用户会话，获取Session ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+            examples:
+              随机昵称:
+                value:
+                  nickname: "快乐的考拉"
+                  avatar: "https://example.com/avatar1.png"
+              自定义昵称:
+                value:
+                  nickname: "我的自定义昵称"
+                  avatar: "https://example.com/custom.png"
+      responses:
+        '201':
+          description: 会话创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /sessions/{session_id}:
+    get:
+      tags:
+        - 用户会话
+      summary: 获取会话信息
+      description: 获取指定会话的详细信息
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: 会话ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 会话信息获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - 用户会话
+      summary: 更新会话信息
+      description: 更新用户昵称、头像等信息
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: 会话ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionRequest'
+      responses:
+        '200':
+          description: 会话更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - 用户会话
+      summary: 销毁会话
+      description: 销毁用户会话，清理相关数据
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: 会话ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 会话销毁成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========== 成员管理 ==========
+  /rooms/{room_id}/members:
+    post:
+      tags:
+        - 成员管理
+      summary: 加入房间
+      description: 用户加入指定房间
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinRoomRequest'
+      responses:
+        '201':
+          description: 加入房间成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinRoomResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    get:
+      tags:
+        - 成员管理
+      summary: 获取房间成员列表
+      description: 获取指定房间的所有成员信息
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      responses:
+        '200':
+          description: 成员列表获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rooms/{room_id}/members/{session_id}:
+    put:
+      tags:
+        - 成员管理
+      summary: 更新成员信息
+      description: 更新房间内成员信息（权限管理）
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+        - name: session_id
+          in: path
+          required: true
+          description: 成员会话ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRequest'
+      responses:
+        '200':
+          description: 成员信息更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - 成员管理
+      summary: 离开房间
+      description: 用户主动离开房间或被移出房间
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+        - name: session_id
+          in: path
+          required: true
+          description: 成员会话ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 离开房间成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========== 播放控制 ==========
+  /rooms/{room_id}/playback:
+    get:
+      tags:
+        - 播放控制
+      summary: 获取播放状态
+      description: 获取房间当前播放状态
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      responses:
+        '200':
+          description: 播放状态获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackStateResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - 播放控制
+      summary: 更新播放状态
+      description: 更新房间播放状态（播放、暂停、跳转等）
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlaybackRequest'
+      responses:
+        '200':
+          description: 播放状态更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackStateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rooms/{room_id}/play:
+    post:
+      tags:
+        - 播放控制
+      summary: 播放
+      description: 开始播放视频
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayRequest'
+      responses:
+        '200':
+          description: 播放操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackStateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rooms/{room_id}/pause:
+    post:
+      tags:
+        - 播放控制
+      summary: 暂停
+      description: 暂停视频播放
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PauseRequest'
+      responses:
+        '200':
+          description: 暂停操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackStateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rooms/{room_id}/seek:
+    post:
+      tags:
+        - 播放控制
+      summary: 跳转
+      description: 跳转到指定播放时间
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeekRequest'
+      responses:
+        '200':
+          description: 跳转操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackStateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rooms/{room_id}/sync:
+    post:
+      tags:
+        - 播放控制
+      summary: 强制同步
+      description: 强制同步所有成员的播放状态
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRequest'
+      responses:
+        '200':
+          description: 同步操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========== 系统接口 ==========
+  /health:
+    get:
+      tags:
+        - 系统监控
+      summary: 健康检查
+      description: 系统健康状态检查
+      responses:
+        '200':
+          description: 系统正常运行
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /stats:
+    get:
+      tags:
+        - 系统监控
+      summary: 系统统计
+      description: 获取系统整体统计信息
+      responses:
+        '200':
+          description: 统计信息获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatsResponse'
+
+  /rooms/{room_id}/stats:
+    get:
+      tags:
+        - 系统监控
+      summary: 房间统计
+      description: 获取指定房间的详细统计信息
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: 房间ID
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{6}$'
+      responses:
+        '200':
+          description: 房间统计获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomStatsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    SessionAuth:
+      type: apiKey
+      in: header
+      name: X-Session-ID
+
+  schemas:
+    # ========== 基础响应 ==========
+    SuccessResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: "success"
+        data:
+          type: object
+          nullable: true
+        request_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 4001
+        message:
+          type: string
+          example: "参数缺失"
+        details:
+          type: string
+          nullable: true
+        request_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+
+    # ========== 房间相关 ==========
+    CreateRoomRequest:
+      type: object
+      required:
+        - name
+        - media_url
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: 房间名称
+          example: "我的观影房间"
+        description:
+          type: string
+          maxLength: 500
+          description: 房间描述
+          example: "和朋友一起看剧"
+        media_url:
+          type: string
+          format: uri
+          description: 媒体资源URL
+          example: "https://example.com/video.mp4"
+        is_private:
+          type: boolean
+          description: 是否私密房间
+          default: false
+        password:
+          type: string
+          minLength: 4
+          maxLength: 20
+          description: 房间密码（私密房间时必填）
+          example: "password123"
+        max_users:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 7
+          description: 最大用户数
+      example:
+        name: "我的观影房间"
+        description: "和朋友一起看剧"
+        media_url: "https://example.com/video.mp4"
+        is_private: false
+        max_users: 7
+
+    CreateRoomResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Room'
+
+    UpdateRoomRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: 房间名称
+        description:
+          type: string
+          maxLength: 500
+          description: 房间描述
+        is_private:
+          type: boolean
+          description: 是否私密房间
+        password:
+          type: string
+          minLength: 4
+          maxLength: 20
+          description: 房间密码
+
+    RoomListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                rooms:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Room'
+                pagination:
+                  $ref: '#/components/schemas/Pagination'
+
+    RoomDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/Room'
+                - type: object
+                  properties:
+                    members:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/RoomMember'
+                    playback_state:
+                      $ref: '#/components/schemas/PlaybackState'
+
+    Room:
+      type: object
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Z0-9]{6}$'
+          description: 房间ID（6位房间号）
+          example: "8XA92B"
+        name:
+          type: string
+          description: 房间名称
+          example: "我的观影房间"
+        description:
+          type: string
+          nullable: true
+          description: 房间描述
+          example: "和朋友一起看剧"
+        creator_session_id:
+          type: string
+          format: uuid
+          description: 创建者会话ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        is_private:
+          type: boolean
+          description: 是否私密房间
+          example: false
+        max_users:
+          type: integer
+          description: 最大用户数
+          example: 7
+        status:
+          type: string
+          enum: [active, inactive, archived]
+          description: 房间状态
+          example: "active"
+        media_url:
+          type: string
+          format: uri
+          description: 媒体资源URL
+          example: "https://example.com/video.mp4"
+        current_time:
+          type: number
+          minimum: 0
+          description: 当前播放时间（秒）
+          example: 125.5
+        duration:
+          type: number
+          minimum: 0
+          description: 媒体总时长（秒）
+          example: 3600.0
+        playback_rate:
+          type: number
+          minimum: 0.25
+          maximum: 4.0
+          description: 播放倍速
+          example: 1.0
+        settings:
+          type: object
+          description: JSON格式房间设置
+          example:
+            volume: 0.8
+            quality: "auto"
+            subtitle_enabled: true
+        version:
+          type: integer
+          description: 版本号（乐观锁）
+          example: 5
+        last_active_at:
+          type: string
+          format: date-time
+          description: 最后活跃时间
+          example: "2025-12-30T10:30:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2025-12-30T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+          example: "2025-12-30T10:30:00Z"
+
+    # ========== 用户会话相关 ==========
+    CreateSessionRequest:
+      type: object
+      required:
+        - nickname
+        - avatar
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: 用户昵称
+          example: "快乐的考拉"
+        avatar:
+          type: string
+          format: uri
+          description: 头像URL
+          example: "https://example.com/avatar1.png"
+
+    CreateSessionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserSession'
+
+    UpdateSessionRequest:
+      type: object
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: 用户昵称
+        avatar:
+          type: string
+          format: uri
+          description: 头像URL
+
+    SessionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserSession'
+
+    UserSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 会话ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        nickname:
+          type: string
+          description: 用户昵称
+          example: "快乐的考拉"
+        avatar:
+          type: string
+          format: uri
+          description: 头像URL
+          example: "https://example.com/avatar1.png"
+        room_id:
+          type: string
+          pattern: '^[A-Z0-9]{6}$'
+          nullable: true
+          description: 当前所在房间ID
+          example: "8XA92B"
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2025-12-30T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+          example: "2025-12-30T10:30:00Z"
+
+    # ========== 成员管理相关 ==========
+    JoinRoomRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          description: 房间密码（私密房间时必填）
+          example: "password123"
+
+    JoinRoomResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RoomMember'
+
+    UpdateMemberRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [host, guest, admin]
+          description: 成员角色
+          example: "admin"
+        permissions:
+          type: object
+          description: JSON格式权限配置
+          example:
+            can_control_playback: true
+            can_invite_members: false
+            can_kick_members: false
+
+    MemberListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RoomMember'
+
+    MemberResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RoomMember'
+
+    RoomMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 成员ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        room_id:
+          type: string
+          pattern: '^[A-Z0-9]{6}$'
+          description: 房间ID
+          example: "8XA92B"
+        session_id:
+          type: string
+          format: uuid
+          description: 用户会话ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        nickname:
+          type: string
+          description: 成员昵称
+          example: "快乐的考拉"
+        avatar:
+          type: string
+          format: uri
+          description: 成员头像
+          example: "https://example.com/avatar1.png"
+        role:
+          type: string
+          enum: [host, guest, admin]
+          description: 成员角色
+          example: "guest"
+        permissions:
+          type: object
+          description: JSON格式权限配置
+          example:
+            can_control_playback: true
+            can_invite_members: false
+        joined_at:
+          type: string
+          format: date-time
+          description: 加入时间
+          example: "2025-12-30T09:00:00Z"
+        last_seen_at:
+          type: string
+          format: date-time
+          description: 最后在线时间
+          example: "2025-12-30T10:30:00Z"
+        is_active:
+          type: boolean
+          description: 是否活跃成员
+          example: true
+
+    # ========== 播放控制相关 ==========
+    PlaybackStateResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PlaybackState'
+
+    UpdatePlaybackRequest:
+      type: object
+      properties:
+        is_playing:
+          type: boolean
+          description: 是否正在播放
+          example: true
+        current_time:
+          type: number
+          minimum: 0
+          description: 当前播放时间（秒）
+          example: 125.5
+        playback_rate:
+          type: number
+          minimum: 0.25
+          maximum: 4.0
+          description: 播放倍速
+          example: 1.0
+        volume:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: 音量
+          example: 0.8
+        quality:
+          type: string
+          enum: [auto, 1080p, 720p, 480p, 360p]
+          description: 播放画质
+          example: "auto"
+
+    PlaybackState:
+      type: object
+      properties:
+        room_id:
+          type: string
+          pattern: '^[A-Z0-9]{6}$'
+          description: 房间ID
+          example: "8XA92B"
+        is_playing:
+          type: boolean
+          description: 是否正在播放
+          example: true
+        current_time:
+          type: number
+          minimum: 0
+          description: 当前播放时间（秒）
+          example: 125.5
+        duration:
+          type: number
+          minimum: 0
+          description: 媒体总时长（秒）
+          example: 3600.0
+        playback_rate:
+          type: number
+          minimum: 0.25
+          maximum: 4.0
+          description: 播放倍速
+          example: 1.0
+        volume:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: 音量
+          example: 0.8
+        quality:
+          type: string
+          enum: [auto, 1080p, 720p, 480p, 360p]
+          description: 播放画质
+          example: "auto"
+        buffering_progress:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: 缓冲进度
+          example: 0.8
+        error_message:
+          type: string
+          nullable: true
+          description: 播放错误信息
+          example: null
+        updated_by_session:
+          type: string
+          format: uuid
+          description: 最后更新者会话ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+          example: "2025-12-30T10:30:00Z"
+
+    PlayRequest:
+      type: object
+      properties:
+        current_time:
+          type: number
+          minimum: 0
+          description: 播放起始时间（秒）
+          example: 0.0
+        playback_rate:
+          type: number
+          minimum: 0.25
+          maximum: 4.0
+          description: 播放倍速
+          example: 1.0
+
+    PauseRequest:
+      type: object
+      properties:
+        current_time:
+          type: number
+          minimum: 0
+          description: 暂停时播放时间（秒）
+          example: 125.5
+
+    SeekRequest:
+      type: object
+      required:
+        - target_time
+      properties:
+        target_time:
+          type: number
+          minimum: 0
+          description: 目标播放时间（秒）
+          example: 300.0
+        playback_rate:
+          type: number
+          minimum: 0.25
+          maximum: 4.0
+          description: 跳转后播放倍速
+          example: 1.0
+
+    SyncRequest:
+      type: object
+      properties:
+        force_sync:
+          type: boolean
+          description: 是否强制同步（忽略用户手动操作）
+          default: false
+
+    SyncResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                synced_members:
+                  type: integer
+                  description: 同步成功的成员数量
+                  example: 5
+                sync_delay_ms:
+                  type: integer
+                  description: 同步延迟（毫秒）
+                  example: 50
+
+    # ========== 系统监控相关 ==========
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [healthy, degraded, unhealthy]
+                  example: "healthy"
+                uptime:
+                  type: number
+                  description: 运行时间（秒）
+                  example: 3600.0
+                version:
+                  type: string
+                  description: 服务版本
+                  example: "1.0.0"
+                database:
+                  type: string
+                  enum: [connected, disconnected]
+                  example: "connected"
+                websocket_connections:
+                  type: integer
+                  description: WebSocket连接数
+                  example: 25
+
+    SystemStatsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                total_rooms:
+                  type: integer
+                  description: 总房间数
+                  example: 150
+                active_rooms:
+                  type: integer
+                  description: 活跃房间数
+                  example: 25
+                total_sessions:
+                  type: integer
+                  description: 总会话数
+                  example: 500
+                active_sessions:
+                  type: integer
+                  description: 活跃会话数
+                  example: 75
+                total_messages:
+                  type: integer
+                  description: 总消息数
+                  example: 10000
+                avg_sync_delay_ms:
+                  type: number
+                  description: 平均同步延迟（毫秒）
+                  example: 45.2
+
+    RoomStatsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                room_id:
+                  type: string
+                  pattern: '^[A-Z0-9]{6}$'
+                  description: 房间ID
+                  example: "8XA92B"
+                member_count:
+                  type: integer
+                  description: 当前成员数
+                  example: 5
+                max_member_count:
+                  type: integer
+                  description: 历史最大成员数
+                  example: 7
+                total_messages:
+                  type: integer
+                  description: 总消息数
+                  example: 250
+                avg_sync_delay_ms:
+                  type: number
+                  description: 平均同步延迟（毫秒）
+                  example: 35.8
+                uptime_minutes:
+                  type: number
+                  description: 房间运行时长（分钟）
+                  example: 120.5
+                last_activity:
+                  type: string
+                  format: date-time
+                  description: 最后活动时间
+                  example: "2025-12-30T10:30:00Z"
+
+    # ========== 通用组件 ==========
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: 当前页码
+          example: 1
+        limit:
+          type: integer
+          description: 每页数量
+          example: 20
+        total:
+          type: integer
+          description: 总记录数
+          example: 150
+        pages:
+          type: integer
+          description: 总页数
+          example: 8
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 4001
+            message: "参数缺失"
+            details: "缺少必需参数: name"
+            request_id: "550e8400-e29b-41d4-a716-446655440000"
+            timestamp: "2025-12-30T10:30:00Z"
+
+    Unauthorized:
+      description: 未授权访问
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 2001
+            message: "无效Token"
+            details: "提供的Session ID无效或已过期"
+            request_id: "550e8400-e29b-41d4-a716-446655440000"
+            timestamp: "2025-12-30T10:30:00Z"
+
+    Forbidden:
+      description: 权限不足
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 2003
+            message: "权限不足"
+            details: "当前用户没有权限执行此操作"
+            request_id: "550e8400-e29b-41d4-a716-446655440000"
+            timestamp: "2025-12-30T10:30:00Z"
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 3001
+            message: "房间不存在"
+            details: "房间ID: 8XA92B 不存在"
+            request_id: "550e8400-e29b-41d4-a716-446655440000"
+            timestamp: "2025-12-30T10:30:00Z"
+
+    Conflict:
+      description: 资源冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 3002
+            message: "房间已满"
+            details: "房间已达到最大用户数限制: 7"
+            request_id: "550e8400-e29b-41d4-a716-446655440000"
+            timestamp: "2025-12-30T10:30:00Z"
+
+    TooManyRequests:
+      description: 请求过于频繁
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 4291
+            message: "请求过于频繁"
+            details: "请稍后再试"
+            request_id: "550e8400-e29b-41d4-a716-446655440000"
+            timestamp: "2025-12-30T10:30:00Z"
+
+tags:
+  - name: 房间管理
+    description: 房间的创建、更新、删除和查询操作
+  - name: 用户会话
+    description: 用户会话的创建、更新和销毁操作
+  - name: 成员管理
+    description: 房间成员的增加、删除和权限管理操作
+  - name: 播放控制
+    description: 视频播放状态的控制和同步操作
+  - name: 系统监控
+    description: 系统健康检查和统计信息查询

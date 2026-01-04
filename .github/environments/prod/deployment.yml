@@ -1,0 +1,24 @@
+environment: production
+cluster: xiaowo-prod-cluster
+namespace: xiaowo-production
+replicas:
+  backend: 5
+  frontend: 5
+resources:
+  cpu: 500m
+  memory: 512Mi
+env_vars:
+  - ENV=production
+  - DATABASE_URL=postgresql://prod_user:${DB_PASSWORD}@postgres-prod:5432/xiaowo_production
+  - REDIS_URL=redis://redis-prod:6379
+  - LOG_LEVEL=info
+ingress:
+  enabled: true
+  host: xiaowo.com
+  tls:
+    enabled: true
+    cert_manager: true
+monitoring:
+  enabled: true
+  prometheus: true
+  grafana: true

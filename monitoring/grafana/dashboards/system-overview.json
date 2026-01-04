@@ -1,0 +1,193 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "小窝系统概览",
+    "tags": ["xiaowo", "overview"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "服务状态",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=~\"xiaowo-.*\"}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "HTTP 请求率",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"xiaowo-backend\"}[5m])",
+            "refId": "A",
+            "legendFormat": "{{method}} {{status}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 18, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "系统负载",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "refId": "A",
+            "legendFormat": "CPU使用率 %"
+          },
+          {
+            "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+            "refId": "B",
+            "legendFormat": "内存使用率 %"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "活跃房间数",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "xiaowo_active_rooms",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 10},
+                {"color": "green", "value": 20}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "在线用户数",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "xiaowo_online_users",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 50},
+                {"color": "green", "value": 100}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "WebSocket连接数",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "xiaowo_websocket_connections",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 100},
+                {"color": "green", "value": 500}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Redis连接数",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "redis_connected_clients",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 10},
+                {"color": "green", "value": 50}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "错误率趋势",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "(\n  rate(http_requests_total{job=\"xiaowo-backend\",status=~\"5..\"}[5m]) \n  / \n  rate(http_requests_total{job=\"xiaowo-backend\"}[5m])\n) * 100",
+            "refId": "A",
+            "legendFormat": "HTTP 5xx错误率 %"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 16}
+      }
+    ],
+    "templating": {
+      "list": []
+    }
+  },
+  "folderId": null,
+  "overwrite": true
+}

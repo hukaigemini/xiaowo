@@ -1,0 +1,18 @@
+environment: staging
+cluster: xiaowo-staging-cluster
+namespace: xiaowo-staging
+replicas:
+  backend: 3
+  frontend: 3
+resources:
+  cpu: 200m
+  memory: 256Mi
+env_vars:
+  - ENV=staging
+  - DATABASE_URL=postgresql://staging_user:staging_pass@postgres-staging:5432/xiaowo_staging
+  - REDIS_URL=redis://redis-staging:6379
+ingress:
+  enabled: true
+  host: staging.xiaowo.com
+  tls:
+    enabled: false

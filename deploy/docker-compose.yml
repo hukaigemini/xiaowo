@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ../backend
+      dockerfile: ../deploy/Dockerfile.backend
+    ports:
+      - "8080:8080"
+    environment:
+      - GIN_MODE=debug
+      - DB_DRIVER=sqlite
+      - DB_SOURCE=/data/xiaowo.db
+      - JWT_SECRET=dev_secret
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - app
+    restart: unless-stopped

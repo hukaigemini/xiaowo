@@ -1,0 +1,21 @@
+environment: development
+cluster: xiaowo-dev-cluster
+namespace: xiaowo-dev
+replicas:
+  backend: 2
+  frontend: 2
+resources:
+  cpu: 100m
+  memory: 128Mi
+env_vars:
+  - ENV=development
+  - DATABASE_URL=postgresql://dev_user:dev_pass@postgres-dev:5432/xiaowo_dev
+  - REDIS_URL=redis://redis-dev:6379
+  - LOG_LEVEL=debug
+ingress:
+  enabled: true
+  host: dev.xiaowo.com
+  tls:
+    enabled: false
+monitoring:
+  enabled: false

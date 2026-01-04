@@ -1,0 +1,125 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "小窝应用性能监控",
+    "tags": ["xiaowo", "performance"],
+    "timezone": "browser",
+    "refresh": "15s",
+    "time": {
+      "from": "now-30m",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "HTTP 响应时间 P95",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"xiaowo-backend\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "P95 响应时间 (秒)"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "HTTP 请求率",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"xiaowo-backend\"}[5m])",
+            "refId": "A",
+            "legendFormat": "{{method}} {{status}} - {{handler}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "WebSocket 连接状态",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "xiaowo_websocket_connections_active",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 100},
+                {"color": "green", "value": 500}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "消息处理延迟",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(xiaowo_websocket_message_duration_seconds_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P95 消息延迟 (秒)"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 18, "x": 6, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "数据库查询时间",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(xiaowo_db_query_duration_seconds_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P95 查询时间 (秒)"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "房间同步成功率",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(xiaowo_room_sync_success_total[5m]) / rate(xiaowo_room_sync_total[5m]) * 100",
+            "refId": "A",
+            "legendFormat": "同步成功率 %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 100
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "用户会话统计",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "xiaowo_user_sessions_total",
+            "refId": "A",
+            "format": "table"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      }
+    ]
+  },
+  "folderId": null,
+  "overwrite": true
+}

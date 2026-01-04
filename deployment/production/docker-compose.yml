@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    image: ${DOCKER_REGISTRY}/xiaowo:${VERSION:-latest}
+    container_name: xiaowo-backend-production
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - ENV=production
+      - DATABASE_URL=postgresql://prod_user:${DB_PASSWORD}@postgres-prod:5432/xiaowo_production
+      - REDIS_URL=redis://redis-prod:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=info
+    depends_on:
+      - postgres-prod
+      - redis-prod
+    networks:
+      - xiaowo-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # 前端服务
+  frontend:
+    image: ${DOCKER_REGISTRY}/xiaowo-frontend:${VERSION:-latest}
+    container_name: xiaowo-frontend-production
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://backend:8080
+    depends_on:
+      - backend
+    networks:
+      - xiaowo-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # PostgreSQL数据库
+  postgres-prod:
+    image: postgres:15
+    container_name: xiaowo-postgres-production
+    restart: always
+    environment:
+      - POSTGRES_DB=xiaowo_production
+      - POSTGRES_USER=prod_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_production_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - xiaowo-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # Redis缓存
+  redis-prod:
+    image: redis:7-alpine
+    container_name: xiaowo-redis-production
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_production_data:/data
+    networks:
+      - xiaowo-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # Nginx反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: xiaowo-nginx-production
+    restart: always
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - xiaowo-network
+
+volumes:
+  postgres_production_data:
+    driver: local
+  redis_production_data:
+    driver: local
+
+networks:
+  xiaowo-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
